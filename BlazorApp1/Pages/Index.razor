@@ -1,0 +1,238 @@
+﻿@page "/"
+
+@using Radzen;
+@using System;
+@using System.Diagnostics;
+@using Microsoft.Build.Locator;
+@using System;
+@using System.Collections.Generic;
+@using System.IO;
+@using System.Text;
+@using System.Text.RegularExpressions;
+@using Newtonsoft.Json.Linq;
+
+@code {
+    bool loading = false;
+    public IList<Solution> Solutions;
+    public IList<Solution> SelectedSolutions = new List<Solution>();
+    public readonly IDictionary<string, string> FunctionNameMappers = new Dictionary<string, string>
+    {
+        {"Remundo.Api", "Remundo.Api.Tenants"}
+    };
+    Radzen.Blazor.RadzenDataGrid<Solution> solutionGrid;
+
+    public void OnScanButtonClicked(MouseEventArgs args)
+    {
+        loading = true;
+        Solutions = GetSolutions();
+        loading = false;
+        solutionGrid.Reload();
+    }
+
+    public List<Solution> GetSolutions()
+    {
+        // var solutions = new List<Solution>();
+        // var filePaths = Directory.GetFiles("C:\\code", "*.sln", SearchOption.AllDirectories).ToList();
+
+        // foreach (var path in filePaths)
+        // {
+        //     string baseSettingPath;
+        //     var splitPath = path.Split(".sln")[0];
+        //     var name = splitPath.Split("\\").Last();
+        //     var builder = Path.GetDirectoryName(path);
+        //     var localSettingsPath = Directory.GetFiles(builder, "*local.settings.json", SearchOption.AllDirectories);
+        //     if (localSettingsPath.Count() == 0)
+        //     {
+        //         baseSettingPath = Directory.GetFiles(builder, "*appsettings.Development.json", SearchOption.AllDirectories)?.FirstOrDefault();
+        //         if (baseSettingPath == null)
+        //             continue;
+
+        //     }
+        //     else baseSettingPath = localSettingsPath.First();
+
+        //     solutions.Add(new Solution
+        //         {
+        //             Name = name,
+        //             Path = path,
+        //             SettingsPath = baseSettingPath
+        //         });
+        // };
+
+        // return solutions;
+        var solutions = new List<Solution>();
+
+        // foreach (var path in filePaths)
+        // {
+        //     string json = File.ReadAllText(path);
+
+        //     // Parse the JSON into a JObject
+        //     JObject schema = JObject.Parse(json);
+
+        //     // Find the "TenantId" property and update its type
+        //     JToken tenantIdProperty;
+        //     if (schema["properties"]?["TenantId"] is JObject tenantIdObject)
+        //     {
+        //         tenantIdObject["type"] = "string";
+        //         tenantIdObject["maxLength"] = 255;
+        //         tenantIdProperty = tenantIdObject;
+        //     }
+        //     else
+        //     {
+        //         schema["properties"]["TenantId"] = new JObject();
+        //         schema["properties"]["TenantId"]["type"] = "string";
+        //     }
+
+        //     // Write the modified JSON back to the file
+        //     File.WriteAllText(path, schema.ToString());
+
+        //     Console.WriteLine("Schema updated successfully.");
+
+        // }
+        var filePaths = Directory.GetFiles("C:\\code\\Remundo.Terminator\\src\\Remundo.Terminator.Adapter\\Mappers", "*.cs", SearchOption.AllDirectories).ToList();
+
+        foreach(var filePath in filePaths)
+        {
+            string classText = File.ReadAllText(filePath);
+            if (classText.Contains("public string TenantId { get; set; }"))
+            {
+                Console.WriteLine("TenantId property already exists.");
+                continue;
+            }
+
+            // Add the TenantId property after the Metadata property
+            string tenantIdProperty = "{\"tenant-id\", cmd.TenantId ?? request.GetDefaultTenant() },";
+            string pattern = "cmd.CorrelationId},";
+            string pattern2 = "cmd.EorInstanceId},";
+            classText = Regex.Replace(classText, pattern, $"{pattern}{Environment.NewLine}            {tenantIdProperty}");
+            classText = Regex.Replace(classText, pattern2, $"{pattern2}{Environment.NewLine}            {tenantIdProperty}");
+
+            File.WriteAllText(filePath, classText);
+        }
+
+        filePaths = Directory.GetFiles("C:\\code\\Remundo.Terminator\\src\\Remundo.Terminator.Domain\\Commands", "*.cs", SearchOption.AllDirectories).ToList();
+
+        foreach (var filePath in filePaths)
+        {
+            string classText = File.ReadAllText(filePath);
+            if (classText.Contains("public string TenantId { get; set; }"))
+            {
+                Console.WriteLine("TenantId property already exists.");
+                continue;
+            }
+
+            // Add the TenantId property after the Metadata property
+            string tenantIdProperty = "public string TenantId { get; set; }";
+            string pattern = "public IDictionary<string, string> Metadata { get; set; }";
+            classText = Regex.Replace(classText, pattern, $"{tenantIdProperty}{Environment.NewLine}    {pattern}");
+
+            File.WriteAllText(filePath, classText);
+        }
+        return solutions;
+    }
+
+    public void OnRowSelect (Solution solution)
+    {
+        SelectedSolutions.Add(solution);
+    }
+
+    public void OnRowDeselect(Solution solution)
+    {
+        SelectedSolutions.Remove(solution);
+    }
+
+    public void StartRunningApps()
+    {
+        // Parallel.ForEach(SelectedSolutions, (x, y) =>
+        // {
+        //     MSBuildLocator.RegisterDefaults();
+
+        //     // Specify the path to your .sln file and the build configuration.
+        //     string solutionFilePath = "x";
+        //     string configuration = "Debug";
+
+        //     try
+        //     {
+        //         // Load the solution.
+        //         var globalProperties = new Dictionary<string, string>
+        //     {
+        //         { "Configuration", configuration }
+        //     };
+
+        //         var projectCollection = new ProjectCollection(globalProperties);
+        //         projectCollection.RegisterLogger(new ConsoleLogger());
+
+        //         var project = projectCollection.LoadProject(solutionFilePath);
+        //         var buildResult = project.Build();
+
+        //         if (buildResult)
+        //         {
+        //             Console.WriteLine("Build successful.");
+
+        //             // Run the application from the built output.
+        //             string outputDirectory = Path.Combine(project.DirectoryPath, "bin", configuration);
+        //             string applicationPath = Path.Combine(outputDirectory, "YourApplication.exe");
+
+        //             if (File.Exists(applicationPath))
+        //             {
+        //                 Process.Start(applicationPath);
+        //             }
+        //             else
+        //             {
+        //                 Console.WriteLine("Application not found. Check your output path and configuration.");
+        //             }
+        //         }
+        //         else
+        //         {
+        //             Console.WriteLine("Build failed.");
+        //         }
+        //     }
+        //     catch (InvalidProjectFileException ex)
+        //     {
+        //         Console.WriteLine($"Error loading the project file: {ex.Message}");
+        //     }
+        // });
+    }
+    });
+
+<PageTitle>Index</PageTitle>
+
+<h1>Hello, world!</h1>
+
+Welcome to your new app.
+
+<button @onclick="(e) => OnScanButtonClicked(e)">Scan for solutions</button>
+<button disabled=@SelectedSolutions.Count() > 0>
+    Start
+</button>
+<button disabled="@SelectedSolutions.Count() == 1">
+    Edit Settings file
+</button>
+
+<Radzen.Blazor.RadzenDataGrid @ref="solutionGrid" SelectionMode="DataGridSelectionMode.Multiple" PageSize="4" Data="Solutions" RowSelect=OnRowSelect RowDeselect=OnRowDeselect
+AllowRowSelectOnRowClick=true AllowVirtualization=true
+                              TItem="Solution" IsLoading="loading" @bind-Value=@SelectedSolutions
+                              style="@("--rz-grid-header-background-color: lightblue; --rz-grid-filter-background-color: lightblue;   --rz-grid-filter-border: 0;" )">
+    <Columns>
+        <Radzen.Blazor.RadzenDataGridColumn TItem="Solution" Property="Name" Title="Name">
+            <Template Context="data">
+                @data.Name
+            </Template>
+        </Radzen.Blazor.RadzenDataGridColumn>
+                <Radzen.Blazor.RadzenDataGridColumn TItem="Solution" Property="Path" Title="Path">
+            <Template Context="data">
+                @data.Path
+            </Template>
+        </Radzen.Blazor.RadzenDataGridColumn>
+        <Radzen.Blazor.RadzenDataGridColumn TItem="Solution" Property="Status" Title="Status">
+            <Template Context="data">
+                @data.Status
+            </Template>
+        </Radzen.Blazor.RadzenDataGridColumn>
+    </Columns>
+</Radzen.Blazor.RadzenDataGrid>
+
+<style>
+    .rz-state-highlight {
+        background-color: blue;
+    }
+</style>
